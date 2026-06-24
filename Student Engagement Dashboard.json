@@ -1,0 +1,351 @@
+{
+  "name": "Student Engagement Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "1RrWh8lYb_hq7RC-klS7MOVr3pHOtnMohSaMFrHmwKN4",
+          "mode": "list",
+          "cachedResultName": "Student_engagement",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1RrWh8lYb_hq7RC-klS7MOVr3pHOtnMohSaMFrHmwKN4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 495224598,
+          "mode": "list",
+          "cachedResultName": "Dataset",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1RrWh8lYb_hq7RC-klS7MOVr3pHOtnMohSaMFrHmwKN4/edit#gid=495224598"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        368
+      ],
+      "id": "96beeb5a-3b04-4e73-81ae-8fe0ab7ae1c1",
+      "name": "Google Sheets Trigger",
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "NJCnYSzUES2a5Xel",
+          "name": "Google Sheets Trigger OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst cleanedData = items.map((item) => {\n  const cleanedItem = { ...item.json };\n\n  // Convert StudentID to number\n  cleanedItem.StudentID = Number(cleanedItem.StudentID);\n\n  // Convert Gender to lowercase\n  cleanedItem.Gender = cleanedItem.Gender.toLowerCase();\n\n  // Convert Location to title case\n  cleanedItem.Location =\n    cleanedItem.Location.charAt(0).toUpperCase() +\n    cleanedItem.Location.slice(1).toLowerCase();\n\n  // Convert EnrollmentDate, LastLogin, and PurchaseDate to Date\n  cleanedItem.EnrollmentDate = new Date(cleanedItem.EnrollmentDate);\n  cleanedItem.LastLogin = new Date(cleanedItem.LastLogin);\n  cleanedItem.PurchaseDate = new Date(cleanedItem.PurchaseDate);\n\n  // Convert PaymentAmount to number and round to 2 decimal places\n  cleanedItem.PaymentAmount = Number(cleanedItem.PaymentAmount).toFixed(2);\n\n  // Convert Renewed to boolean\n  cleanedItem.Renewed = cleanedItem.Renewed.toLowerCase() === \"yes\";\n\n  return cleanedItem;\n});\n\nreturn cleanedData;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        368
+      ],
+      "id": "816109fb-4db5-4240-b6c2-acc23e444c06",
+      "name": "Data Cleaning"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map((item) => item.json);\nconst totalStudents = items.length;\n\nconst totalVideosWatched = items.reduce(\n  (sum, item) => sum + item.VideosWatched, 0,\n);\n\nconst totalAssignmentsSubmitted = items.reduce(\n  (sum, items) => sum + (Number(items.AssignmentsSubmitted) || 0), 0\n);\n\nconst avgQuizScore =\n  items.reduce((sum, item) => sum + item.QuizScoresAvg, 0) / totalStudents;\n\nconst avgSessionTime =\n  items.reduce((sum, item) => sum + item.AvgSessionTime, 0) / totalStudents;\n\nconst renewedSubscriptions = items.filter((item) => item.Renewed).length;\n\nconst studentsByLocation = items.reduce((grouped, item) => {\n  grouped[item.Location] = (grouped[item.Location] || 0) + 1;\n  return grouped;\n}, {});\n\nconst churnRate = ((items.filter(i => !i.Renewed).length / totalStudents) * 100).toFixed(2);\nconst avgPayment = (items.reduce((s,i) => s + Number(i.PaymentAmount), 0) / totalStudents).toFixed(2);\nconst completionRate = ((items.filter(i => i.VideosWatched > 10).length / totalStudents) * 100).toFixed(2);\nconst highEngagement = items.filter(i => i.QuizScoresAvg > 75).length;\n\nreturn {\n  totalStudents,\n  totalVideosWatched,\n  totalAssignmentsSubmitted,\n  avgQuizScore,\n  avgSessionTime,\n  renewedSubscriptions,\n  studentsByLocation,\n  churnRate,\n  avgPayment,\n  completionRate,\n  highEngagement\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        368
+      ],
+      "id": "5076b76a-ec35-4086-9631-e554109565ed",
+      "name": "Calculating KPIs"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Act as an expert data analyst. Given the following KPIs from a student engagement dataset, summarize the overall engagement performance in 2-3 crisp and insightful sentences suitable for a leadership dashboard.\n\nMetrics:\n{{ $json.studentsByLocation }}\n{{ $json.totalStudents }}\n{{ $json.totalAssignmentsSubmitted }}\n",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        352,
+        64
+      ],
+      "id": "8d0e31a2-8309-4857-9da2-21a292ae5b87",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://quickchart.io/chart/create",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chart\": {\n    \"type\": \"doughnut\",\n    \"data\": {\n      \"datasets\": [{\n        \"data\": [],\n        \"backgroundColor\": [\"#ffffff00\"] \n      }]\n    },\n    \"options\": {\n      \"cutout\": \"90%\",\n      \"plugins\": {\n        \"legend\": { \"display\": false },\n        \"doughnutlabel\": {\n          \"labels\": [\n            {\n              \"text\": \"{{ $json.totalStudents }}\",\n              \"font\": {\n                \"size\": 40\n              }\n            },\n            {\n              \"text\": \"Total Students\"\n            }\n          ]\n        }\n      }\n    }\n  }\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        256,
+        368
+      ],
+      "id": "24387815-c5a7-4b85-94a7-16b3526fe830",
+      "name": "Total Students"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1️⃣ Grab all incoming items\nconst items = $input.all();\n\n// 2️⃣ Prepare containers\nlet summaryText = '';\nconst charts = [];\n\n// 3️⃣ Loop over each item just once\nfor (const item of items) {\n  const data = item.json;\n\n  // Capture the first summary block found\n  if (data.text && !summaryText) {\n    summaryText = data.text.trim();\n  }\n  // If it's a chart block, collect URL + auto-ID\n  else if (data.url) {\n    // Try to pick a unique part of the chart URL for captioning\n    const chartId =\n      data.url.match(/(sf|zf)-[\\w-]+/)?.[0] || `chart-${charts.length + 1}`;\n    charts.push({\n      caption: `Chart ${charts.length + 1} (${chartId})`,\n      imageUrl: data.url\n    });\n  }\n}\n\n// 4️⃣ Fallback summary if none was provided\nif (!summaryText) {\n  summaryText = \"No summary provided.\";\n}\n\n// 5️⃣ Compose the HTML for each chart\nconst chartBlocks = charts\n  .map(\n    chart => `\n  <div class=\"chart-block\">\n    <h3>${chart.caption}</h3>\n    <img src=\"${chart.imageUrl}\" alt=\"${chart.caption}\" />\n  </div>\n`\n  )\n  .join(\"\\n\");\n\n// 6️⃣ Full HTML report document\nconst html = `\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\" />\n  <title>📊 Student Engagement Report</title>\n  <style>\n    body {\n      font-family: 'Segoe UI', sans-serif;\n      background: #f5f7fa;\n      margin: 0;\n      padding: 30px;\n      color: #222;\n    }\n    h1 {\n      color: #2c3e50;\n      text-align: center;\n      margin-bottom: 30px;\n    }\n    .summary-box {\n      background: #fffefc;\n      border-left: 5px solid #ffa500;\n      padding: 20px 25px;\n      border-radius: 8px;\n      max-width: 900px;\n      margin: 0 auto 40px auto;\n      box-shadow: 0 2px 8px rgba(0,0,0,0.05);\n      font-size: 1.05em;\n    }\n    .charts {\n      display: flex;\n      flex-wrap: wrap;\n      justify-content: center;\n      gap: 24px;\n    }\n    .chart-block {\n      background: #fff;\n      border-radius: 10px;\n      box-shadow: 0 2px 6px rgba(0,0,0,0.1);\n      padding: 16px;\n      text-align: center;\n      width: 100%;\n      max-width: 360px;\n    }\n    .chart-block img {\n      max-width: 100%;\n      border-radius: 6px;\n      border: 1px solid #ccc;\n    }\n    footer {\n      text-align: center;\n      font-size: 0.85em;\n      color: #666;\n      margin-top: 50px;\n    }\n  </style>\n</head>\n<body>\n  <h1>📊 Student Engagement Report</h1>\n  <div class=\"summary-box\"><p>${summaryText}</p></div>\n  <div class=\"charts\">${chartBlocks}</div>\n  <footer>Generated on ${new Date().toLocaleString()}</footer>\n</body>\n</html>\n`;\n\n// 7️⃣ Return exactly one item containing the full report\nreturn [\n  {\n    json: {\n      html\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        384
+      ],
+      "id": "d148a7b3-0b73-4960-ae78-b3759f730e96",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "sendTo": "jmiguel.ram@gmail.com",
+        "subject": "Report",
+        "message": "={{ $json.html }} <p>Full data: <a href=\"https://docs.google.com/spreadsheets/d/11KqxqaQrEi0r0PaDGik_nE0OpyF9hl_pewuBosFRVA4/edit?usp=sharing\">Google Sheet</a></p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1296,
+        384
+      ],
+      "id": "2dada246-1a2f-4046-bf5b-c91c5892aca9",
+      "name": "Send a message",
+      "webhookId": "3fa05347-b039-474e-b026-f7390695c1b8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "VGhaUzxqh8BqPzNw",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 9
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        864,
+        272
+      ],
+      "id": "074ae7ef-80e7-4d7a-ae39-869d80b92d24",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://quickchart.io/chart/create",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chart\": {\n    \"type\": \"doughnut\",\n    \"data\": {\n      \"datasets\": [{\n        \"data\": [],\n        \"backgroundColor\": [\"#ffffff00\"] \n      }]\n    },\n    \"options\": {\n      \"cutout\": \"90%\",\n      \"plugins\": {\n        \"legend\": { \"display\": false },\n        \"doughnutlabel\": {\n          \"labels\": [\n            {\n              \"text\": \"{{ $json.totalAssignmentsSubmitted }}\",\n              \"font\": {\n                \"size\": 40\n              }\n            },\n            {\n              \"text\": \"Total Students\"\n            }\n          ]\n        }\n      }\n    }\n  }\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        256,
+        576
+      ],
+      "id": "3c709c70-2055-4497-ae7c-9068163497f1",
+      "name": "totalAssignmentsSubmitted"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://quickchart.io/chart/create",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chart\": {\n    \"type\": \"horizontalBar\",\n    \"data\": {\n      \"labels\": [\n        \"{{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[0][0] }}\",\n        \"{{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[1][0] }}\",\n        \"{{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[2][0] }}\",\n        \"{{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[3][0] }}\",\n        \"{{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[4][0] }}\",\n        \"{{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[5][0] }}\"\n      ],\n      \"datasets\": [\n        {\n          \"label\": \"Student Count\",\n          \"data\": [\n            {{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[0][1] }},\n            {{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[1][1] }},\n            {{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[2][1] }},\n            {{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[3][1] }},\n            {{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[4][1] }},\n            {{ Object.entries($json.studentsByLocation).sort((a,b) => b[1]-a[1])[5][1] }}\n          ],\n          \"backgroundColor\": \"rgba(75,192,192,0.6)\"\n        }\n      ]\n    },\n    \"options\": {\n      \"title\": {\n        \"display\": true,\n        \"text\": \"Top 6 Locations\"\n      }\n    }\n  }\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        256,
+        768
+      ],
+      "id": "4b8a6a28-c151-4a6d-8110-090668ad9800",
+      "name": "Location Count"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        416,
+        240
+      ],
+      "id": "33237a1c-2128-45f5-b87e-442124000fa5",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "mPoRHoRMhaCSkWhm",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "Data Cleaning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Cleaning": {
+      "main": [
+        [
+          {
+            "node": "Calculating KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculating KPIs": {
+      "main": [
+        [
+          {
+            "node": "Total Students",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "totalAssignmentsSubmitted",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Location Count",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Total Students": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "totalAssignmentsSubmitted": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Location Count": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "af7f1bc2-1d6e-470d-9920-8ec2363f7c96",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "53f75d45acc384e2fc73dc41ec81238b8c0f40a9f721c0444cf58597c8619ead"
+  },
+  "nodeGroups": [],
+  "id": "cgELwCL8MCmVpuRK",
+  "tags": []
+}
